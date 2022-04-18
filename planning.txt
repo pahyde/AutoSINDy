@@ -1,0 +1,96 @@
+
+
+How should the API feel?
+
+First how are we generating the data?
+
+    1) Dynamics First
+        i)   define dynamics given by f(X)
+        ii)  solve_ivp w/ interpolation to get X
+        iii) apply f -> X to get X_dot
+
+        inputs:
+            - t0
+            - tf
+            - step 
+            - f 
+            - initial_conditions
+
+        outputs:
+            - X, X_dot (Tensors)
+
+
+    2) Data First
+        i)  given X from measurements or external source
+        ii) numerically differentiate using one of:
+            a) finite difference
+            b) others
+        to obtain -> X_dot
+
+        inputs:
+        outputs:
+        TODO
+
+It will definitiely be nice to dedicate a module to some systems of interest
+usage:
+
+    import sindy_data
+    from dynamics import lorenz_dynamics, SHO_dynamics, simple_pendulum_dynamics
+
+    lorenz = sindy_data.generate_system_from_dynamics(
+        lorenz_dynamics, 
+        init_conditions=(0, 1, 1.05),
+        t0 = 0
+        tf = 20
+        steps = 10000
+    )
+
+    print(lorenz.ode())
+    lorenz.plot()
+    X, X_dot = lorenz.training_data()
+
+    # need a good way to add noise.
+
+------------------------------------------------------------------------------------------
+
+Now how do we go backward. How do we learn the dynamics from the data?
+
+usage:
+    from sindy_algorithms import STLSQ, SR3
+    from sindy import SINDy, SINDy_LSQ
+    from sindy_libs import PolynomialLibrary, TrigLibrary
+
+    model = SINDy_LSQ(
+        libs=[
+            PolynomialLibrary(max_degree=1)
+            TrigLibrary()
+        ],
+        feature_names=['x','y','z'],
+        algo=STLSQ(threshold = 0.1)
+    )
+    
+    model.fit(X, X_dot)
+    model.dynamics() 
+
+    model = SINDy(
+        input_dim=X.size(),
+        libs=[
+            PolynomialLibrary(max_degree=1)
+            TrigLibrary()
+        ],
+        feature_names=['x','y','z']
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
