@@ -25,6 +25,16 @@ def differentiate(X,t):
     dX  = torch.gradient(X,dim=0)[0]
     dT  = torch.gradient(T,dim=0)[0]
     return dX/dT
+
+
+def differentiate_1(X,t):
+    n,m = X.size()
+    dt = (t[1] - t[0]).item()
+    X_dot_0   = (X[1] - X[0]) / dt                     
+    X_dot_mid = (X[1:-1] - X[0:-2]) / (2*dt)           
+    X_dot_f   = (X[-1] - X[-2]) / dt                   
+    return torch.vstack((X_dot_0, X_dot_mid, X_dot_f))   
+    
     
 
 
