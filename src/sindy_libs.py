@@ -1,8 +1,10 @@
 import torch
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 class SindyLib:
     def __init__(self, libs, num_features, feature_names):
-        terms = [ lambda x: torch.ones(x.size()[0]) ]
+        terms = [ lambda x: torch.ones(x.size()[0]).to(device) ]
         names = ['1']
         for lib in libs:
             lib_candidates = lib.get_candidates(num_features, feature_names)
