@@ -32,7 +32,7 @@ class SINDy(nn.Module):
         return params
 
     def show(self):
-        rows = torch.Tensor(self.Xi_weights()).tolist()
+        rows = self.Xi_weights().tolist()
         equations = [[round(coeff, 3) for coeff in row] for row in rows]
         for i,eq in enumerate(equations):
             x   = self.feature_names[i]
