@@ -68,7 +68,7 @@ class AutoSINDy(nn.Module):
             print(f'({x})\' = {rhs}')
 
     def forward(self, X, X_dot):
-        Z = self.encoder(X):
+        Z = self.encoder(X)
         X_recon = self.decoder(Z)
         Z_dot = self.translate_derivative(X, X_dot, self.encoder)
         f_Z = self.SINDy(self.lib.theta(Z))
