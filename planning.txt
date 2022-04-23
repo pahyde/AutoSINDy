@@ -81,7 +81,85 @@ usage:
         feature_names=['x','y','z']
     )
 
+--------------------------------------------------------------------------
 
+How do we precisely define the Autoencoder SINDy problem? 
+
+Let's restrict this to the the first order phase portrait representation.
+Suppose we have the following assumptions:
+    1) Z in R^n is a time-series tensor in coordinates corresponding 
+       to a dynamical system Z_dot = f(Z) such that f ~ theta(Z)
+        is as sparse as possible.
+    2) T: R^n -> R^m, m >= n
+       is an injective mapping (not necessarily linear) mapping Z
+       to obfuscated state space X in R^m. In general we expect m >> n.
+
+
+Problem Statement:
+    
+Given X = T(Z) in R^m, find a mapping phi ~= T^-1
+such that Z* = phi(X) satisfies a dynamical system Z_dot* = f*(Z*) for 
+some f* with sparsity and error as close as possible to that of
+the original equation Z_dot = f(Z) 
+
+So really I think this is all about finding the right phi. It's relatively
+trivial to find the weights Xi given the right intrinsic coordinate Z*.
+
+As it stands the current method just descends to the optimal phi and f*
+simultaneously. Find the autoencoder weights and SINDy weights together. 
+
+We'll code this up as quickly as possible and analyze the results empirically.
+
+Network Architecture______________________________________________________
+
+loss:
+    loss_fn = recon + sindy_z + sindy_x + reg
+
+            = |X - X_recon| + |Z_dot - f_Z| + |X_dot - f_X| + |Xi|
+
+            = |X - psi(phi(X))|
+            + |grad_X phi(X) @ X_dot - theta(Z) @ Xi|
+            + |X_dot - grad_Z psi(Z) @ f_Z|
+            + |Xi| 
+
+forward(X,X_dot):
+    Z = encoder(X)
+    X_recon = decoder(Z)
+    Z_dot = get_Z_dot(X, X_dot)
+    f_Z = sindy(theta(Z))
+    f_X = get_f_X(Z, f_Z)
+    return X_recon, Z_dot, f_Z, f_X, Xi
+
+training loop:
+
+    for epoch in range(epochs):
+
+        for X, X_dot in dataloader:
+
+            X = X.to(device)
+            X_dot = X_dot.to(device)
+
+            X_recon, Z_dot, f_Z, f_X, Xi = model(X, X_dot)
+            loss = loss_fn(X_recon, Z_dot, f_Z, f_X, Xi)
+
+            optimizer.zero_grad()
+            loss.backwards()
+            optimizer.step()
+
+            if epoch % 1000 == 0:
+                print(loss)
+
+    model.show()
+
+
+
+    
+    
+
+
+
+
+    
 
 
 
