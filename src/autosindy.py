@@ -9,36 +9,39 @@ class AutoSINDy(nn.Module):
         self,
         input_dim, 
         latent_dim,
-        libs=None, 
-        feature_names=None
+        hidden_layer_widths,
+        libs=None 
     ):
         super(AutoSINDy, self).__init__()
-        n, m = input_dim, latent_dim 
-        
+
+        n, m  = input_dim, latent_dim 
         self.feature_names = [f'z{i+1}' for i in range(m)]
-        self.lib = SindyLib(libs, num_features=m, feature_names=feature_names) 
-
-        self.encoder = nn.Sequential(
-            nn.Linear(n,10),
-            nn.ReLU,
-            nn.Linear(10,4),
-            nn.RelU,
-            nn.Linear(4,latent_dim)
-        )
-
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 4),
-            nn.ReLU(),
-            nn.Linear(4,10),
-            nn.ReLU(),
-            nn.Linear(10,n)
-        )
+        
+        self.lib = SindyLib(
+          libs,
+          num_features=m, 
+          feature_names=self.feature_names
+        ) 
 
         self.SINDy = nn.Linear(len(self.lib.terms), m, bias=False)
 
-    def translate_derivative(X, X_dot, network):
+        layer_widths = (n, *hidden_layer_widths, m)
+        self.encoder = self.fc_net(layer_widths)
+        self.decoder = self.fc_net(layer_widths[::-1])
+
+
+    def fc_net(self,widths):
+        layers = []
+        for i, (w1,w2) in enumerate(zip(widths, widths[1:])):
+            layers.append(nn.Linear(w1,w2))
+            if i < len(widths)-2:
+              layers.append(nn.ReLU())
+        return nn.Sequential(*layers)
+
+
+    def translate_derivative(self, X, X_dot, network):
         parameters = []
-        for layer in encoder:
+        for layer in network:
             if isinstance(layer, nn.Linear):
                 parameters.append((layer.weight, layer.bias))
         l, dl = X, X_dot
@@ -74,7 +77,7 @@ class AutoSINDy(nn.Module):
         f_Z = self.SINDy(self.lib.theta(Z))
         f_X = self.translate_derivative(Z, f_Z, self.decoder)
         Xi = self.Xi_weights()
-        return X_recon, Z_dot, f_Z, f_X, Xi   
+        return X_recon, Z, Z_dot, f_Z, f_X, Xi     
 
 
 
@@ -117,3 +120,20 @@ if __name__ == "__main__":
 
         
         
+'''
+        self.encoder = nn.Sequential(
+            nn.Linear(n,l1),
+            nn.ReLU(),
+            nn.Linear(l1,l2),
+            nn.ReLU(),
+            nn.Linear(l2,m)
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(m,l2),
+            nn.ReLU(),
+            nn.Linear(l2,l1),
+            nn.ReLU(),
+            nn.Linear(l1,n)
+        )
+        '''

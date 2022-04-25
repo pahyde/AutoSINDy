@@ -1,7 +1,42 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from scipy.integrate import solve_ivp
 from scipy import signal
+
+
+
+class AutoSINDyDataset:
+    def __init__(self, system, transform):
+        Z, Z_dot = system.snapshots()
+        X, X_dot = system.snapshots().transform(transform)
+        self.Z = torch.Tensor(Z)
+        self.Z_dot = torch.Tensor(Z_dot)
+        self.X = torch.Tensor(X)
+        self.X_dot = torch.Tensor(X_dot)
+        self.equations = system.equations
+        self.trajectories = system.trajectories
+        self.plotZ = system.plot
+
+    def plotX(self):
+        _,m = self.X.shape
+        plt.figure(figsize=(8,6), dpi=100)
+        if m == 1:
+            plt.plot(self.X)
+        elif m == 2:
+            plt.plot(self.X[:,0], self.X[:,1], linestyle='None', marker='.')
+        elif m == 3:
+            ax = plt.axes(projection='3d')
+            ax.plot3D(self.X[:,0], self.X[:,1], self.X[:,2], linestyle='None', marker='.');
+
+    def __getitem__(self, index):
+        return (self.X[index], self.X_dot[index])
+
+    def __len__(self):
+        return len(self.X)
+
+
+
 
 def generate_system_from_dynamics(f, init_conditions, t0, tf, steps, equations=None):
     t = np.linspace(t0, tf, steps)
@@ -28,7 +63,7 @@ def generate_system_from_data(X, dt=0.01):
         torch.Tensor(X_dot),
         torch.Tensor(t)
     )
-
+'''
 class DynamicalSystem:
     def __init__(self, X, X_dot, t, equations=None, init_conditions=None):
         self.X = X
@@ -49,6 +84,7 @@ class DynamicalSystem:
         print(self.eq)
         print()
 
+'''
 
 if __name__ == "__main__":
     from dynamics import Exp2D, Lorenz
