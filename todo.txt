@@ -1,0 +1,31 @@
+TO-DO----------------------------------------------------
+
+Features
+
+
+2) implement parameter dependent thresholding
+
+3) consolidate training loop with more transparency 
+    - refactor with loss function?
+        - how should quantify loss (train test split)
+        - probably train/val/test doesn't make sense
+    - how do we define overfitting
+        - mainly learning weights that fit a single initial condition
+
+4) visualization
+    - dial in 3d-plots
+    - plot tangent vectors for x_dot
+
+
+In-Progress_________________________________________________
+
+1) vectorize jacobian calculation for simulated data
+
+
+
+
+
+Complete___________________________________________________
+
+
+

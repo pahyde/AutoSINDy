@@ -78,21 +78,35 @@ class DynamicalSystemData:
         self.X_dot = X_dot
 
     def transform(self, T):
-        Z = np.apply_along_axis(T, 1, self.X)
-        Z_dot = np.zeros(Z.shape)
-        for i in range(Z_dot.shape[0]):
-            Z_dot[i] = self.__translate_derivative(
-                self.X[i], 
-                self.X_dot[i],
-                T
-            )
+        Z  = np.apply_along_axis(T, 1, self.X)
+        DZ = np.apply_along_axis(
+            lambda x: jacobian(T,torch.Tensor(x)).numpy(),
+            1, self.X
+        )
+        Z_dot = self.__mmult_components(DZ, self.X_dot)
         return DynamicalSystemData(Z, Z_dot)
 
-    def __translate_derivative(self, x, x_dot, T):
-        x = torch.Tensor(x)
-        x_dot = torch.Tensor(x_dot)
-        z_dot = jacobian(T,x) @ x_dot
-        return z_dot.numpy()
+    def __mmult_components(self, A, x):
+        _,N,M = A.shape
+        n,m   = x.shape
+        return (A @ x.reshape(n,m,1)).reshape(n,N)
+
+    #def transform(self, T):
+    #    Z = np.apply_along_axis(T, 1, self.X)
+    #    Z_dot = np.zeros(Z.shape)
+    #    for i in range(Z_dot.shape[0]):
+    #        Z_dot[i] = self.__translate_derivative(
+    #            self.X[i], 
+    #            self.X_dot[i],
+    #            T
+    #        )
+    #    return DynamicalSystemData(Z, Z_dot)
+
+    #def __translate_derivative(self, x, x_dot, T):
+    #    x = torch.Tensor(x)
+    #    x_dot = torch.Tensor(x_dot)
+    #    z_dot = jacobian(T,x) @ x_dot
+    #    return z_dot.numpy()
 
     def __iter__(self):
         yield from [self.X, self.X_dot]
@@ -158,7 +172,6 @@ class SimplePendulum(DynamicalSystem):
         theta, theta_dot = X
         g = self.g
         l = self.l
-        mu = self.mu
         return np.array([
             theta_dot,
             -g / l * np.sin(theta)# - mu * theta_dot
@@ -182,9 +195,26 @@ class DampedPendulum(DynamicalSystem):
         mu = self.mu
         return np.array([
             theta_dot,
-            -g / l * np.sin(theta)# - mu * theta_dot
+            -g / l * np.sin(theta) - mu * theta_dot
         ])
 
+class DampedOsc(DynamicalSystem):
+    def __init__(self, b=0.5, c=1):
+        self.b = b
+        self.c = c
+        x1 = f'(x)\'     = x_dot'
+        x2 = f'(x_dot)\' = -{self.c} * x - {self.b} * x_dot'
+        self.equations = stack(x1,x2)
+        self.init_data()
+
+    def f(self, t, X):
+        x, x_dot = X
+        b = self.b
+        c = self.c
+        return np.array([
+            x_dot,
+            -c * x - b * x_dot
+        ])
 
 
 
