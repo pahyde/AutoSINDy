@@ -8,26 +8,39 @@ from scipy import signal
 
 class AutoSINDyDataset:
     def __init__(self, system, transform):
-        Z, Z_dot = system.snapshots()
-        X, X_dot = system.snapshots().transform(transform)
-        self.Z = torch.Tensor(Z)
-        self.Z_dot = torch.Tensor(Z_dot)
-        self.X = torch.Tensor(X)
-        self.X_dot = torch.Tensor(X_dot)
+        self.intrinsic = system.data()
+        self.hidden    = self.intrinsic.transform(transform)
+        self.Z         = self.intrinsic.X
+        self.Z_dot     = self.intrinsic.X_dot
+        self.X         = self.hidden.X
+        self.X_dot     = self.hidden.X_dot
         self.equations = system.equations
-        self.trajectories = system.trajectories
-        self.plotZ = system.plot
+
+    def plotZ(self):
+        _,m = self.intrinsic.trajectories[0].x.shape
+        plt.figure(figsize=(8,6), dpi=100)
+        if m == 3:
+            ax = plt.axes(projection='3d')
+        for z, z_dot, _ in self.intrinsic.trajectories:
+            if m == 1:
+                plt.plot(z)
+            elif m == 2:
+                plt.plot(z[:,0], z[:,1], linestyle='None', marker='.', markersize=1)
+            elif m == 3:
+                ax.plot3D(z[:,0], z[:,1], z[:,2], linestyle='None', marker='.', markersize=1);
 
     def plotX(self):
-        _,m = self.X.shape
+        _,m = self.hidden.trajectories[0].x.shape
         plt.figure(figsize=(8,6), dpi=100)
-        if m == 1:
-            plt.plot(self.X)
-        elif m == 2:
-            plt.plot(self.X[:,0], self.X[:,1], linestyle='None', marker='.')
-        elif m == 3:
+        if m == 3:
             ax = plt.axes(projection='3d')
-            ax.plot3D(self.X[:,0], self.X[:,1], self.X[:,2], linestyle='None', marker='.');
+        for x, x_dot, _ in self.hidden.trajectories:
+            if m == 1:
+                plt.plot(x)
+            elif m == 2:
+                plt.plot(x[:,0], x[:,1], linestyle='None', marker='.', markersize=1)
+            elif m == 3:
+                ax.plot3D(x[:,0], x[:,1], x[:,2], linestyle='None', marker='.', markersize=1);
 
     def __getitem__(self, index):
         return (self.X[index], self.X_dot[index])

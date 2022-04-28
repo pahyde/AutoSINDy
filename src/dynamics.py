@@ -4,12 +4,25 @@ import torch
 from torch.autograd.functional import jacobian
 from scipy.integrate import solve_ivp
 
-# testtttttttttttttttttttttttt
+# trajectories
 def stack(*args):
     return '\n'.join([*args])
 
+class Trajectory:
+    def __init__(self, x, x_dot, time):
+        self.x = x
+        self.x_dot = x_dot
+        self.time = time
+
+    def __iter__(self):
+        yield from [
+            self.x, 
+            self.x_dot,
+            self.time
+        ]
+
 class DynamicalSystem:
-    def __init__(self, f, equations=None):
+    def __init__(self, f, equations=None, order=1):
         self.f = f
         self.equations = equations
         self.init_data()
@@ -28,7 +41,11 @@ class DynamicalSystem:
             dense_output=True
         )
         X = np.stack(system.sol(time), axis=-1)
-        self.trajectories.append(X)
+        self.trajectories.append(Trajectory(
+            X,
+            self.__derivatives(X),
+            time
+        ))
 
     def add_trajectories(self, initial_conditions, t):
         for ics in initial_conditions:
@@ -37,27 +54,30 @@ class DynamicalSystem:
     def add_random_sample(self):
         pass
 
-    def snapshots(self):
-        snapshots = self.trajectories + self.samples
-        X = np.vstack(snapshots)
-        X_dot = np.apply_along_axis(lambda row: self.f(None, row), 1, X)
-        return DynamicalSystemData(X, X_dot)
+    def data(self):
+        return DynamicalSystemData(self.trajectories)
+
+    def __derivatives(self, X):
+        f_x = lambda x: self.f(None, x)
+        return np.apply_along_axis(f_x, 1, X)
+
 
     def plot(self):
         if len(self.trajectories) == 0:
             print('Nothing to plot. Add a trajectory')
             return
-        _, m = self.trajectories[0].shape
+        _, m = self.trajectories[0].x.shape
         plt.figure(figsize=(8,6), dpi=100)
         if m == 3:
             ax = plt.axes(projection='3d')
         for traj in self.trajectories:
+            snapshots = traj.x
             if m == 1 or m > 3:
-                plt.plot(traj);
+                plt.plot(snapshots);
             elif m == 2:
-                plt.plot(traj[:,0], traj[:,1]);
+                plt.plot(snapshots[:,0], snapshots[:,1]);
             elif m == 3:
-                ax.plot3D(traj[:,0], traj[:,1], traj[:,2]);
+                ax.plot3D(snapshots[:,0], snapshots[:,1], snapshots[:,2]);
 
 
     def show(self):
@@ -65,7 +85,7 @@ class DynamicalSystem:
         print(f'num samples:      {len(self.samples)}')
         print()
         if self.equations is None:
-            print('Nothing equation to show. Must initialize object with equations argument')
+            print('No equation to show. Initialize object with equations argument')
             return
         print('equations:')
         print(self.equations)
@@ -73,23 +93,46 @@ class DynamicalSystem:
 
 
 class DynamicalSystemData:
-    def __init__(self, X, X_dot):
-        self.X = X
-        self.X_dot = X_dot
+    def __init__(self, trajectories):
+        self.trajectories = trajectories
+        self.X = torch.Tensor(
+            np.vstack([traj.x for traj in trajectories])
+        )
+        self.X_dot = torch.Tensor(
+            np.vstack([traj.x_dot for traj in trajectories])
+        )
 
-    def transform(self, T):
-        Z  = np.apply_along_axis(T, 1, self.X)
+    def transform(self, T, use_jacobian=False):
+        transformed = []
+        for x, x_dot, time in self.trajectories:
+            z = self.__transform(x,T)
+            z_dot = self.__f_Z(x,x_dot,T) if use_jacobian else self.__dzdt(z,time)
+            transformed.append(Trajectory(z, z_dot, time))
+        return DynamicalSystemData(transformed)
+
+    def __f_Z(self, X, X_dot, T):
         DZ = np.apply_along_axis(
             lambda x: jacobian(T,torch.Tensor(x)).numpy(),
-            1, self.X
+            1, X
         )
-        Z_dot = self.__mmult_components(DZ, self.X_dot)
-        return DynamicalSystemData(Z, Z_dot)
+        Z_dot = self.__mmult_components(DZ, X_dot)
+        return Z_dot
+
+    def __dzdt(self, X, time):
+        n,m = X.shape
+        T = np.stack(tuple(time for _ in range(m)), axis=1)
+        return np.gradient(X,time,axis=0)
+
+    def __transform(self, X, T):
+        return np.apply_along_axis(T, 1, X)
 
     def __mmult_components(self, A, x):
         _,N,M = A.shape
         n,m   = x.shape
         return (A @ x.reshape(n,m,1)).reshape(n,N)
+    
+    def __iter__(self):
+        yield from [self.X, self.X_dot]
 
     #def transform(self, T):
     #    Z = np.apply_along_axis(T, 1, self.X)
@@ -108,8 +151,6 @@ class DynamicalSystemData:
     #    z_dot = jacobian(T,x) @ x_dot
     #    return z_dot.numpy()
 
-    def __iter__(self):
-        yield from [self.X, self.X_dot]
 
 
 class Exp1D(DynamicalSystem):
