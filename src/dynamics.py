@@ -4,6 +4,8 @@ import torch
 from torch.autograd.functional import jacobian
 from scipy.integrate import solve_ivp
 
+import sindy_utils
+
 # trajectories
 def stack(*args):
     return '\n'.join([*args])
@@ -21,6 +23,15 @@ class Trajectory:
             self.time
         ]
 
+class VectorField:
+    def __init__(self, x, x_dot):
+        self.x = x
+        self.x_dot = x_dot
+
+    def __iter__(self):
+        yield from [self.x, self.x_dot]
+
+
 class DynamicalSystem:
     def __init__(self, f, equations=None, order=1):
         self.f = f
@@ -29,40 +40,95 @@ class DynamicalSystem:
 
     def init_data(self):
         self.trajectories = []
+        self.vector_field = None
         self.samples = []
 
-    def add_trajectory(self, initial_conditions, t):
+    def add_trajectory(self, initial_conditions, t, method='RK45', numerical_ddt=False):
         t0, tf, steps = t
         time = np.linspace(t0, tf, steps)
         system = solve_ivp(
             self.f, 
             (t0, tf), 
             initial_conditions, 
-            dense_output=True
+            dense_output=True,
+            method=method
         )
         X = np.stack(system.sol(time), axis=-1)
         self.trajectories.append(Trajectory(
             X,
-            self.__derivatives(X),
+            self.__dxdt(X,time) if numerical_ddt else self.__derivatives(X),
             time
         ))
 
-    def add_trajectories(self, initial_conditions, t):
+    def add_trajectories(self, initial_conditions, t, method='RK45', numerical_ddt=False):
         for ics in initial_conditions:
-            self.add_trajectory(ics, t)
+            self.add_trajectory(ics, t, method, numerical_ddt)
+
+    def add_vector_field(self, density=20):
+        X = np.zeros((density*density,2))
+        X_dot = np.zeros((density*density,2))
+        x0 = min(traj.x[:,0].min() for traj in self.trajectories)
+        xf = max(traj.x[:,0].max() for traj in self.trajectories)
+        y0 = min(traj.x[:,1].min() for traj in self.trajectories)
+        yf = max(traj.x[:,1].max() for traj in self.trajectories)
+        for i,y in enumerate(np.linspace(y0,yf,density)):
+            for j,x in enumerate(np.linspace(x0,xf,density)):
+                loc = np.array([x,y])
+                direction = self.f(None,loc)
+                X[i*density + j] = loc
+                X_dot[i*density + j] = direction
+        self.vector_field = VectorField(X, X_dot)
+
 
     def add_random_sample(self):
         pass
 
     def data(self):
-        return DynamicalSystemData(self.trajectories)
+        return DynamicalSystemData(
+            self.trajectories, 
+            self.vector_field,
+            self.equations
+        )
 
     def __derivatives(self, X):
         f_x = lambda x: self.f(None, x)
         return np.apply_along_axis(f_x, 1, X)
 
+    def __dxdt(self, X, t):
+        n,m = X.shape
+        return np.gradient(X,t,axis=0)
 
-    def plot(self):
+    def plot(
+        self, 
+        figsize=(8,8),
+        dpi=100,
+        scatter=False,
+        marker='.',
+        markersize=2,
+        time_domain=False,
+        vector_field=True
+    ):
+        if self.vector_field is None:
+            vector_field = False
+
+        _, m = self.trajectories[0].x.shape
+        args = (figsize, dpi, scatter, marker, markersize)
+        if time_domain or m == 1:
+            return sindy_utils.plot_time(
+                *args,
+                dim=m,
+                trajectories=self.trajectories
+            )
+        else:
+            print(self.vector_field)
+            return sindy_utils.plot_phase(
+                *args,
+                dim=m,
+                trajectories=self.trajectories,
+                vector_field=self.vector_field if vector_field else None
+            )
+
+    def plot1(self):
         if len(self.trajectories) == 0:
             print('Nothing to plot. Add a trajectory')
             return
@@ -93,8 +159,10 @@ class DynamicalSystem:
 
 
 class DynamicalSystemData:
-    def __init__(self, trajectories):
+    def __init__(self, trajectories, vector_field, equations=None):
         self.trajectories = trajectories
+        self.vector_field = vector_field
+        self.equations = equations
         self.X = torch.Tensor(
             np.vstack([traj.x for traj in trajectories])
         )
@@ -120,7 +188,6 @@ class DynamicalSystemData:
 
     def __dzdt(self, X, time):
         n,m = X.shape
-        T = np.stack(tuple(time for _ in range(m)), axis=1)
         return np.gradient(X,time,axis=0)
 
     def __transform(self, X, T):
@@ -130,6 +197,39 @@ class DynamicalSystemData:
         _,N,M = A.shape
         n,m   = x.shape
         return (A @ x.reshape(n,m,1)).reshape(n,N)
+
+    def plot(
+        self, 
+        figsize=(8,8),
+        dpi=100,
+        scatter=False,
+        marker='.',
+        markersize=2,
+        time_domain=False,
+        vector_field=True
+    ):
+        if self.vector_field is None:
+            vector_field = False
+
+        _, m = self.trajectories[0].x.shape
+        args = (figsize, dpi, scatter, marker, markersize)
+        if time_domain or m == 1:
+            return sindy_utils.plot_time(
+                *args,
+                dim=m,
+                trajectories=self.trajectories
+            )
+        else:
+            print(self.vector_field)
+            return sindy_utils.plot_phase(
+                *args,
+                dim=m,
+                trajectories=self.trajectories,
+                vector_field=self.vector_field if vector_field else None
+            )
+
+        
+
     
     def __iter__(self):
         yield from [self.X, self.X_dot]
@@ -153,30 +253,89 @@ class DynamicalSystemData:
 
 
 
-class Exp1D(DynamicalSystem):
-    def __init__(self, k=1):
-        self.k = k
-        self.equations = f'(x)\' = {k}x'
+class Linear1D(DynamicalSystem):
+    def __init__(self, a=1):
+        self.a = a
+        self.equations = f"""
+        (x)' = {a}x
+        """ 
         self.init_data()
 
     def f(self, t, x):
-        return self.k * x
+        return self.a * x
 
 
-class Exp2D(DynamicalSystem):
-    def __init__(self):
-        x1 = '(x)\' = 2 * y'
-        x2 = '(y)\' = -x'
-        self.equations = stack(x1,x2)
+class Affine1D(DynamicalSystem):
+    def __init__(self, a=1, b=1):
+        self.a = a
+        self.b = b
+        self.equations = f"""
+        (x)' = {a}x + {b}
+        """ 
         self.init_data()
 
+    def f(self, t, x):
+        return self.a * x + self.b
+
+
+class Quadratic1D(DynamicalSystem):
+    def __init__(self, a=1, b=0, c=-4):
+        self.a = a
+        self.b = b
+        self.c = c
+        self.equations = f"""
+        (x)' = {a}x^2 + {b}x + {c}
+        """ 
+        self.init_data()
+
+    def f(self, t, x):
+        return self.a * x**2 + self.b * x + self.c
+
+class Sin1D(DynamicalSystem):
+    def __init__(self, a=1):
+        self.a = a
+        self.equations = f"""
+        (x)' = {a} * sin(x)
+        """ 
+        self.init_data()
+
+    def f(self, t, x):
+        return self.a * np.sin(x)
+
+
+A2 = np.array([[0, 2],
+               [-1,0]])
+
+class Linear2D(DynamicalSystem):
+    def __init__(self, A = A2):
+        self.A = A
+        a,b = A[0]
+        c,d = A[1]
+        self.equations = f"""
+        (x)' = {a}x + {b}y
+        (y)' = {c}x + {d}y 
+        """ 
+        self.init_data()
 
     def f(self, t, X):
-        x,y = X
-        return np.array([
-            2 * y,
-            -x
-        ])
+        return self.A @ X
+
+
+B2 = np.array([1,1])
+class Affine2D(DynamicalSystem):
+    def __init__(self, A = A2, B=B2):
+        self.A = A
+        a,b = A[0]
+        c,d = A[1]
+        e,f = B
+        self.equations = f"""
+        (x)' = {a}x + {b}y + {e}
+        (y)' = {c}x + {d}y + {f} 
+        """ 
+        self.init_data()
+
+    def f(self, t, X):
+        return self.A @ X + self.B
 
 
 class Lorenz(DynamicalSystem):

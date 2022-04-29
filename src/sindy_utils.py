@@ -18,6 +18,49 @@ def plot(X):
         ax = plt.axes(projection='3d')
         ax.plot3D(X[:,0], X[:,1], X[:,2]);
 
+def plot_phase(
+    figsize,
+    dpi,
+    scatter,
+    marker,
+    markersize,
+    dim,
+    trajectories,
+    vector_field
+):
+    plt.figure(figsize=figsize, dpi=dpi)
+    if dim == 2:
+        if vector_field is not None:
+            x,y = vector_field.x[:,0], vector_field.x[:,1]
+            dx,dy = vector_field.x_dot[:,0], vector_field.x_dot[:,1]
+    elif dim == 3:
+        ax = plt.axes(projection='3d')
+        if vector_field is not None:
+            x,y,z = vector_field.x[:,0], vector_field.x[:,1], vector_field.x[:,2]
+            dx,dy,dz = vector_field.x_dot[:,0], vector_field.x_dot[:,1], vector_field.x_dot[:,2]
+    else:
+        print('must have dim=2 or dim=3 to plot phase portrait')
+        return
+    for traj in trajectories:
+        X = traj.x
+        if dim == 2:
+            plt.plot(X[:,0], X[:,1])
+        elif dim == 3:
+            ax.plot3D(X[:,0], X[:,1], X[:,2]);
+    if vector_field is not None:
+        color=(.2,.9,.9,.7)
+        if dim == 2:
+            plt.quiver(x,y,dx,dy,color=color)
+            plt.axis('scaled')
+        elif dim == 3:
+            plt.quiver(x,y,z,dx,dy,dz,color=color,length=2,normalize=True)
+
+
+    
+    
+    
+    
+
 
 def differentiate(X,t):
     n,m = X.size()

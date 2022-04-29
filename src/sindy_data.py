@@ -7,9 +7,9 @@ from scipy import signal
 
 
 class AutoSINDyDataset:
-    def __init__(self, system, transform):
+    def __init__(self, system, transform, use_jacobian=False):
         self.intrinsic = system.data()
-        self.hidden    = self.intrinsic.transform(transform)
+        self.hidden    = self.intrinsic.transform(transform, use_jacobian)
         self.Z         = self.intrinsic.X
         self.Z_dot     = self.intrinsic.X_dot
         self.X         = self.hidden.X
